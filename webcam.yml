@@ -1,0 +1,62 @@
+---
+- name: Run a webcam webserver using Motion
+  hosts: all
+  remote_user: pi
+  become: yes
+  become_method: sudo
+
+  tasks:
+  - name: Remove unwanted software
+    apt: name={{ item }} state=absent
+    with_items:
+      - libavcodec-extra-56
+      - libavformat56
+      - libavresample2
+      - libavutil54
+
+  - name: Install ffmpeg
+    apt: deb="https://github.com/ccrisan/motioneye/wiki/precompiled/ffmpeg_3.1.1-1_armhf.deb"
+
+  - name: Install the software needed for motion
+    apt: name={{ item }} state=present update_cache=yes
+    with_items:
+      - curl
+      - libssl-dev
+      - libcurl4-openssl-dev
+      - libjpeg-dev
+      - libx264-142
+      - libavcodec56
+      - libavformat56
+      - libmysqlclient18
+      - libswscale3
+      - libpq5
+
+  - name: Install motion
+    apt: deb="https://github.com/Motion-Project/motion/releases/download/release-4.0.1/pi_jessie_motion_4.0.1-1_armhf.deb"
+
+  - name: Set the motion config to start the daemon and stream to other hosts
+    lineinfile: dest=/etc/motion/motion.conf
+                regexp="{{ item.regexp }}"
+                line="{{ item.line }}"
+                backrefs=yes
+    with_items:
+      - { regexp: '^stream_localhost ', line: 'stream_localhost off' }
+      - { regexp: '^daemon', line: 'daemon on' }
+      - { regexp: '^;logfile', line: 'logfile /tmp/motion.log' }
+      - { regexp: '^stream_port', line: 'stream_port {{ stream_port }}' }
+      - { regexp: '^stream_quality', line: 'stream_quality 90' }
+      - { regexp: '^webcontrol_localhost', line: 'webcontrol_localhost off' }
+      - { regexp: '^webcontrol_port', line: 'webcontrol_port 8080' }
+
+  - name: Set the motion config to start the daemon
+    lineinfile:
+      dest: /etc/default/motion
+      regexp: '^start_motion_daemon='
+      line: 'start_motion_daemon=yes'
+      backrefs: yes
+
+  - name: Start the motion service
+    service:
+      name: motion
+      state: restarted
+
